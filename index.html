@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <!-- в <head> можно подключить иконки Bootstrap (если ещё не подключено) -->
+<!-- в <head> можно подключить иконки Bootstrap (если ещё не подключено) -->
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+/>
+
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WishList</title>
+  <!-- Bootstrap 5 CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+  <style>
+    /* Небольшие кастомные правки */
+    body { padding-top: 70px; }
+    .pointer { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- Navbar c переключателем языка -->
+  <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">WishList</a>
+      <div class="collapse navbar-collapse">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item dropdown">
+            <a
+              class="nav-link dropdown-toggle"
+              href="#"
+              id="langDropdown"
+              role="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              Язык
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="langDropdown">
+              <li><a class="dropdown-item lang-select pointer" data-lang="ru">Русский</a></li>
+              <li><a class="dropdown-item lang-select pointer" data-lang="en">English</a></li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ======= Главный экран (список вишлистов) ======= -->
+    <div id="viewHome">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <input
+          type="text"
+          id="searchInput"
+          class="form-control me-2"
+          placeholder="Поиск..."
+        >
+        <button id="btnNewList" class="btn btn-primary">
+          Создать список
+        </button>
+      </div>
+      <ul id="wishlistList" class="list-group"></ul>
+    </div>
+
+    <!-- ======= Экран деталей (конфигурация одного списка) ======= -->
+    <div id="viewDetail" class="d-none">
+      <div class="mb-3">
+        <button id="btnBack" class="btn btn-outline-secondary">&larr; Назад</button>
+      </div>
+      <div class="mb-3">
+        <label for="listName" class="form-label">Название</label>
+        <input type="text" id="listName" class="form-control">
+      </div>
+      <div class="mb-3">
+        <label for="listDate" class="form-label">Дата</label>
+        <input type="date" id="listDate" class="form-control">
+      </div>
+      <div class="mb-3">
+        <button id="btnTogglePublic" class="btn btn-info">
+          Открыть для друзей
+        </button>
+      </div>
+      <hr>
+      <h5>Товары</h5>
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-6">
+          <label for="itemTitle" class="form-label">Название товара</label>
+          <input type="text" id="itemTitle" class="form-control">
+        </div>
+        <div class="col-md-4">
+          <label for="itemImg" class="form-label">URL картинки</label>
+          <input type="text" id="itemImg" class="form-control" placeholder="https://...">
+        </div>
+        <div class="col-md-2">
+          <button id="btnAddItem" class="btn btn-success w-100">Добавить</button>
+        </div>
+      </div>
+      <ul id="itemList" class="list-group mb-3"></ul>
+      <button id="btnSaveList" class="btn btn-primary">Сохранить изменения</button>
+    </div>
+
+  </div>
+
+  <!-- jQuery + Bootstrap JS -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+  // ================= Инициализация =================
+
+  let wishlists = [];      // Массив всех списков
+  let currentId = null;    // ID списка, с которым сейчас работаем
+  let lang = 'ru';         // Текущий язык интерфейса
+
+  // Тексты для локализации
+  const translations = {
+    ru: {
+      placeholderSearch: 'Поиск...',
+      btnNewList: 'Создать список',
+      noLists: 'Нет списков',
+      openPublic: 'Открыть для друзей',
+      makePrivate: 'Сделать приватным',
+      placeholderItemTitle: 'Название товара',
+      placeholderItemImg: 'URL картинки',
+      btnAddItem: 'Добавить',
+      noItems: 'Список пуст',
+      btnSave: 'Сохранить изменения',
+      btnBack: 'Назад'
+    },
+    en: {
+      placeholderSearch: 'Search...',
+      btnNewList: 'New list',
+      noLists: 'No wishlists',
+      openPublic: 'Make public',
+      makePrivate: 'Make private',
+      placeholderItemTitle: 'Item title',
+      placeholderItemImg: 'Image URL',
+      btnAddItem: 'Add',
+      noItems: 'Empty',
+      btnSave: 'Save changes',
+      btnBack: 'Back'
+    }
+  };
+
+  // Утилита для получения перевода
+  function t(key) {
+    return translations[lang][key] || key;
+  }
+
+  // Показываем уведомление в браузере
+  function notifyUser(text) {
+    if (Notification.permission === 'granted') {
+      new Notification(text);
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(p => {
+        if (p === 'granted') new Notification(text);
+      });
+    }
+  }
+
+  // Загрузка/сохранение из localStorage
+  function loadData() {
+    const data = localStorage.getItem('wishlists');
+    wishlists = data ? JSON.parse(data) : [];
+  }
+  function saveData() {
+    localStorage.setItem('wishlists', JSON.stringify(wishlists));
+  }
+
+  // ================ Рендеринг ================
+
+  // Переключение на экран home/detail
+  function showHome() {
+    $('#viewDetail').addClass('d-none');
+    $('#viewHome').removeClass('d-none');
+    renderList();
+  }
+  function showDetail() {
+    $('#viewHome').addClass('d-none');
+    $('#viewDetail').removeClass('d-none');
+    renderItems();
+  }
+
+  // Обновляем тексты в UI при смене языка
+  function applyTranslations() {
+    $('#searchInput').attr('placeholder', t('placeholderSearch'));
+    $('#btnNewList').text(t('btnNewList'));
+    $('#btnAddItem').text(t('btnAddItem'));
+    $('#itemTitle').attr('placeholder', t('placeholderItemTitle'));
+    $('#itemImg').attr('placeholder', t('placeholderItemImg'));
+    $('#btnSaveList').text(t('btnSave'));
+    $('#btnBack').text(t('btnBack'));
+    renderList();
+    if (currentId !== null) {
+      const w = wishlists.find(x => x.id === currentId);
+      $('#btnTogglePublic').text(w.public ? t('makePrivate') : t('openPublic'));
+      renderItems();
+    }
+  }
+
+  // Рендер списка wishlists
+ function deleteWishlist(id) {
+  id = String(id);                // ← Важно
+  if (!confirm('Удалить этот вишлист?')) return;
+  wishlists = wishlists.filter(w => w.id !== id);
+  saveData();
+  renderList();
+}
+
+// 2) В renderList() вместо .data('id') используем .attr('data-id')
+function renderList() {
+  const q = $('#searchInput').val().toLowerCase();
+  const $container = $('#wishlistList').empty();
+  const filtered = wishlists.filter(w => w.name.toLowerCase().includes(q));
+
+  if (!filtered.length) {
+    return $container.append(`<li class="list-group-item">${t('noLists')}</li>`);
+  }
+
+  filtered.forEach(w => {
+    const badge = w.public
+      ? `<span class="badge bg-info">Public</span>`
+      : `<span class="badge bg-secondary">Private</span>`;
+    const date = w.date || '—';
+
+    const $li = $(`
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div class="pointer">
+          <strong>${w.name}</strong><br>
+          <small class="text-muted">${date}</small>
+        </div>
+        <div>
+          ${badge}
+          <button
+            class="btn btn-sm btn-outline-danger ms-2 btn-delete-wl"
+            title="Удалить вишлист"
+            data-id="${w.id}"
+          >
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </li>
+    `);
+
+    // — кликаем по названию → редирект
+    $li.find('div.pointer').on('click', () => {
+      window.location.href = `edit.html?id=${encodeURIComponent(w.id)}`;
+    });
+
+    // — кликаем по мусорке → удаляем, берём id как строку
+    $li.find('.btn-delete-wl').on('click', function(e) {
+      e.stopPropagation();
+      const id = $(this).attr('data-id');  // ← attr выдаёт строку
+      deleteWishlist(id);
+    });
+
+    $container.append($li);
+  });
+}
+
+
+
+
+  // Рендер списка товаров текущего wishlist
+  function renderItems() {
+    const w = wishlists.find(x => x.id === currentId);
+    $('#listName').val(w.name);
+    $('#listDate').val(w.date);
+    $('#btnTogglePublic').text(w.public ? t('makePrivate') : t('openPublic'));
+
+    const $cont = $('#itemList').empty();
+    if (!w.items.length) {
+      return $cont.append(
+        `<li class="list-group-item">${t('noItems')}</li>`
+      );
+    }
+    w.items.forEach((it, idx) => {
+      const btnClass = it.picked ? 'success' : 'outline-secondary';
+      const checkMark = it.picked ? '✓' : '';
+      const $li = $(`
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center">
+            <img
+              src="${it.img}"
+              alt=""
+              class="img-thumbnail me-2"
+              style="width:50px;height:50px;object-fit:cover;"
+            >
+            <span>${it.title}</span>
+          </div>
+          <button class="btn btn-sm btn-${btnClass}">${checkMark}</button>
+        </li>
+      `);
+      $li.find('button').on('click', () => {
+        it.picked = !it.picked;
+        saveData();
+        renderItems();
+        if (it.picked) {
+          notifyUser(`Список "${w.name}": товар "${it.title}" отмечен`);
+        }
+      });
+      $cont.append($li);
+    });
+  }
+
+  // ================ Обработчики ================
+
+  $(function() {
+    // initial
+    loadData();
+    applyTranslations();
+
+    // Поиск
+    $('#searchInput').on('input', renderList);
+
+    // Создать новый список
+    $('#btnNewList').on('click', () => {
+      // Формируем уникальный ID (можно любой подходящий вам алгоритм)
+      const newId = Date.now().toString();
+      // Переходим на edit.html, передаём id в параметре URL
+      window.location.href = `edit.html?id=${encodeURIComponent(newId)}`;
+    });
+
+    // Ваш остальной код инициализации...
+    loadData();
+    applyTranslations();
+    $('#searchInput').on('input', renderList);
+
+    // Открыть детали
+    function openDetail(id) {
+      currentId = id;
+      showDetail();
+    }
+
+    // Назад к списку
+    $('#btnBack').on('click', () => {
+      currentId = null;
+      showHome();
+    });
+
+    // Сохранить имя/дату/права
+    $('#btnSaveList').on('click', () => {
+      const w = wishlists.find(x => x.id === currentId);
+      w.name = $('#listName').val();
+      w.date = $('#listDate').val();
+      saveData();
+      renderList();
+      alert('Сохранено');
+    });
+
+    // Переключить публичность
+    $('#btnTogglePublic').on('click', () => {
+      const w = wishlists.find(x => x.id === currentId);
+      w.public = !w.public;
+      saveData();
+      renderItems();
+    });
+
+    // Добавить товар
+    $('#btnAddItem').on('click', () => {
+      const title = $('#itemTitle').val().trim();
+      const img = $('#itemImg').val().trim();
+      if (!title) { alert('Укажите название товара'); return; }
+      const w = wishlists.find(x => x.id === currentId);
+      w.items.push({ title, img, picked: false });
+      saveData();
+      $('#itemTitle, #itemImg').val('');
+      renderItems();
+    });
+
+    // Смена языка
+    $('.lang-select').on('click', function() {
+      lang = $(this).data('lang');
+      applyTranslations();
+    });
+  });
+  </script>
+</body>
+</html>

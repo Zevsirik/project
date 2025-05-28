@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Редактирование вишлиста</title>
+  <!-- Bootstrap 5 CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+  <style>
+    body { padding: 20px; }
+    .picked-indicator { color: green; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="mb-4">Редактировать вишлист</h1>
+
+    <!-- Название и дата -->
+    <div class="mb-3">
+      <label for="wlName" class="form-label">Название вишлиста</label>
+      <input type="text" id="wlName" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="wlDate" class="form-label">Дата мероприятия</label>
+      <input type="date" id="wlDate" class="form-control">
+    </div>
+
+    <!-- Кнопка «Добавить товар» -->
+    <button id="btnAddProduct" class="btn btn-success mb-3">
+      Добавить товар
+    </button>
+
+    <!-- Список товаров -->
+    <ul id="productList" class="list-group mb-4"></ul>
+
+    <!-- Управление вишлистом -->
+    <div class="d-flex gap-2 mb-4">
+      <button id="btnSave" class="btn btn-primary">Сохранить</button>
+      <button id="btnShare" class="btn btn-outline-primary">Поделиться</button>
+      <button id="btnMakePublic" class="btn btn-info">Ссылка для друзей</button>
+      <button id="btnDeleteList" class="btn btn-danger">Удалить вишлист</button>
+    </div>
+
+    <!-- Публичная ссылка -->
+    <div id="publicLinkBlock" class="mt-3 d-none">
+      <label class="form-label">Публичная ссылка:</label>
+      <input type="text" id="publicLink" class="form-control" readonly>
+      <a id="telegramShare" href="#" target="_blank" class="btn btn-sm btn-link mt-1">
+        Отправить в Telegram
+      </a>
+    </div>
+  </div>
+
+  <!-- JQuery + Bootstrap JS -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+  // === 1. STATE и ЗАГРУЗКА ===
+  let wishlist = null;
+  const storageKey = 'wishlists';
+  const params = new URLSearchParams(location.search);
+  const wlId = params.get('id');
+
+  function loadWishlists() {
+    return JSON.parse(localStorage.getItem(storageKey) || '[]');
+  }
+  function saveWishlists(all) {
+    localStorage.setItem(storageKey, JSON.stringify(all));
+  }
+
+  function initWishlist() {
+    const all = loadWishlists();
+    wishlist = all.find(w => w.id === wlId);
+    if (!wishlist) {
+      wishlist = {
+        id: wlId || Date.now().toString(),
+        name: '',
+        date: '',
+        public: false,
+        items: [],
+        token: null
+      };
+      all.push(wishlist);
+      saveWishlists(all);
+    }
+    $('#wlName').val(wishlist.name);
+    $('#wlDate').val(wishlist.date);
+    renderItems();
+    if (wishlist.public && wishlist.token) showPublicLink();
+  }
+
+  // === 2. РЕНДЕР СПИСКА ТОВАРОВ ===
+  function renderItems() {
+    const $list = $('#productList').empty();
+    if (!wishlist.items.length) {
+      return $list.append('<li class="list-group-item">Товаров пока нет</li>');
+    }
+    wishlist.items.forEach((it, idx) => {
+      const badge = it.picked ? '<span class="picked-indicator ms-2">♥</span>' : '';
+      const $li = $(`
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center">
+            <span>
+              <a href="${it.url}" target="_blank">${it.title}</a>
+            </span>
+            ${badge}
+          </div>
+          <button class="btn btn-sm btn-danger">Удалить</button>
+        </li>
+      `);
+      $li.find('button').click(() => {
+        wishlist.items.splice(idx, 1);
+        saveAndRefresh();
+      });
+      $list.append($li);
+    });
+  }
+
+  function saveAndRefresh() {
+    const all = loadWishlists();
+    const i = all.findIndex(w => w.id === wishlist.id);
+    if (i !== -1) all[i] = wishlist;
+    saveWishlists(all);
+    renderItems();
+  }
+
+  // === 3. «Добавить товар» через prompt ===
+  $('#btnAddProduct').click(() => {
+    const title = prompt('Введите название товара:');
+    if (!title) return;
+    const url = prompt('Введите ссылку на товар:');
+    if (!url) return;
+    wishlist.items.push({ title, url, picked: false });
+    saveAndRefresh();
+  });
+
+  // === 4. Сохранение, публикация и удаление вишлиста ===
+  $('#btnSave').click(() => {
+    wishlist.name = $('#wlName').val().trim();
+    wishlist.date = $('#wlDate').val();
+    saveAndRefresh();
+    alert('Сохранено');
+  });
+
+  $('#btnShare').click(() => {
+    if (!wishlist.token) {
+      wishlist.token = Math.random().toString(36).slice(2);
+      saveAndRefresh();
+    }
+    const link = `${location.origin}${location.pathname}?view=${wishlist.id}&token=${wishlist.token}`;
+    prompt('Скопируйте ссылку и отправьте друзьям:', link);
+  });
+
+  $('#btnMakePublic').click(() => {
+    wishlist.public = true;
+    if (!wishlist.token) wishlist.token = Math.random().toString(36).slice(2);
+    saveAndRefresh();
+    showPublicLink();
+  });
+
+  function showPublicLink() {
+    const url = `${location.origin}${location.pathname}?view=${wishlist.id}&token=${wishlist.token}`;
+    $('#publicLink').val(url);
+    $('#telegramShare').attr(
+      'href',
+      'https://t.me/share/url?url=' + encodeURIComponent(url)
+    );
+    $('#publicLinkBlock').removeClass('d-none');
+  }
+
+  $('#btnDeleteList').click(() => {
+    if (!confirm('Удалить этот вишлист навсегда?')) return;
+    let all = loadWishlists();
+    all = all.filter(w => w.id !== wishlist.id);
+    saveWishlists(all);
+    window.location.href = 'index.html';
+  });
+
+  // === 5. ИНИЦИАЛИЗАЦИЯ ===
+  $(document).ready(initWishlist);
+  </script>
+</body>
+</html>
